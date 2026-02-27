@@ -1,0 +1,14 @@
+{
+  "default": {
+    "identifier": "default",
+    "description": "Default capabilities for CatchWord",
+    "local": true,
+    "windows": [
+      "popup"
+    ],
+    "permissions": [
+      "core:default",
+      "shell:allow-open"
+    ]
+  }
+}
