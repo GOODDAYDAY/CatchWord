@@ -1,6 +1,10 @@
-# CatchWord
+<p align="center">
+  <img src="app/image/icon.png" width="128" height="128" alt="CatchWord">
+</p>
 
-全局划词翻译 + 单词本。双击任意英文单词，即刻弹出翻译。
+<h1 align="center">CatchWord</h1>
+
+<p align="center">全局划词翻译 + 单词本。双击任意英文单词，即刻弹出翻译。</p>
 
 ## 功能
 
@@ -9,6 +13,15 @@
 - **翻译浮窗** — 鼠标旁弹出浮窗，显示音标、释义、词性、例句
 - **自动发音** — 翻译完成后自动播放单词发音
 - **单词本** — 查过的单词自动存入本地 JSON 文件，记录查询次数和时间
+
+## 下载
+
+前往 [GitHub Releases](../../releases/latest) 下载最新版本：
+
+- **安装版** — `CatchWord_*_x64-setup.exe`（NSIS 安装包）
+- **绿色版** — `CatchWord-portable-*.zip`（解压即用，无需安装）
+
+> 打 tag 即自动构建发布，无需手动操作。
 
 ## 截图
 
@@ -50,6 +63,15 @@ npm run tauri build
 ```
 
 构建产物在 `app/src-tauri/target/release/bundle/` 目录下。
+
+### 发布
+
+打 tag 并推送，GitHub Actions 会自动构建并创建 Release：
+
+```bash
+git tag v0.1.0
+git push --tags
+```
 
 ## 工作原理
 
@@ -118,20 +140,6 @@ CatchWord/
 - 仅支持英文 → 中文翻译
 - 翻译依赖 Google Translate 免费端点，可能因网络问题不稳定
 - OCR 识别准确率取决于屏幕字体清晰度
-
-## 设计图标
-
-当前图标是临时的蓝底白字 "C"。如需设计新图标：
-
-- [Recraft AI](https://www.recraft.ai/generate/icons) — AI 生成图标，描述概念即可
-- [Canva](https://www.canva.com/create/icons/) — 拖拽式图标设计
-- [Flaticon](https://www.flaticon.com/free-icons/translation) — 10000+ 免费翻译相关图标
-
-生成后用 [Tauri Icon Generator](https://tauri.app/start/create-project/#using-a-custom-icon) 转换：
-
-```bash
-npm run tauri icon path/to/your-icon.png
-```
 
 ## License
 

@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri -> target
+
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Build with Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: app
+          tauriScript: npm run tauri
+          args: --bundles nsis
+          tagName: ${{ github.ref_name }}
+          releaseName: CatchWord ${{ github.ref_name }}
+          releaseDraft: false
+          prerelease: false
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $exe = "app/src-tauri/target/release/CatchWord.exe"
+          $zip = "CatchWord-portable-${tag}.zip"
+          Compress-Archive -Path $exe -DestinationPath $zip
+
+      - name: Upload portable ZIP to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: CatchWord-portable-*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
