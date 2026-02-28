@@ -44,25 +44,60 @@ if "%choice%"=="1" (
 
 set "new_tag=v!new_ver!"
 
+:: Generate changelog from git log since last tag
 echo.
-echo %latest% -^> !new_tag!
+echo ── Changelog (%latest% → !new_tag!) ──
 echo.
+
+set "tmpfile=%TEMP%\catchword_changelog.txt"
+git log %latest%..HEAD --pretty=format:"- %%s" --no-merges > "!tmpfile!" 2>nul
+
+:: Count commits
+set "commit_count=0"
+for /f %%n in ('git rev-list %latest%..HEAD --count 2^>nul') do set "commit_count=%%n"
+
+if !commit_count! equ 0 (
+    echo   No new commits since %latest%.
+    echo.
+    echo Nothing to release.
+    pause
+    exit /b 0
+)
+
+type "!tmpfile!"
+echo.
+echo   (%commit_count% commits)
+echo.
+
 set /p "confirm=Create and push tag !new_tag!? [y/N]: "
 
 if /i not "%confirm%"=="y" (
     echo Cancelled.
+    del "!tmpfile!" 2>nul
     exit /b 0
 )
 
 :: Sync version to tauri.conf.json and package.json via node
+echo.
 echo Updating version to !new_ver! ...
 node -e "var fs=require('fs');['app/src-tauri/tauri.conf.json','app/package.json'].forEach(function(f){var j=JSON.parse(fs.readFileSync(f,'utf8'));j.version='!new_ver!';fs.writeFileSync(f,JSON.stringify(j,null,2)+'\n')})"
 
+:: Build commit message with changelog
+set "msgfile=%TEMP%\catchword_commit_msg.txt"
+echo chore: bump version to !new_ver!> "!msgfile!"
+echo.>> "!msgfile!"
+echo Changes since %latest%:>> "!msgfile!"
+type "!tmpfile!" >> "!msgfile!"
+
 :: Commit version bump, tag, and push
 git add app\src-tauri\tauri.conf.json app\package.json
-git commit -m "chore: bump version to !new_ver!"
-git tag !new_tag!
+git commit -F "!msgfile!"
+git tag -a !new_tag! -F "!msgfile!"
 git push origin HEAD !new_tag!
+
+:: Cleanup
+del "!tmpfile!" 2>nul
+del "!msgfile!" 2>nul
 
 echo.
 echo Tag !new_tag! pushed. GitHub Actions will build the release.
