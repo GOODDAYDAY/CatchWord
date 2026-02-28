@@ -1,17 +1,20 @@
 mod capture;
+mod config;
 mod hook;
 mod translator;
 mod types;
 mod wordbook;
 
+use config::Config;
 use hook::HookEvent;
 use std::sync::{Arc, Mutex, mpsc};
 use tauri::{
     image::Image,
-    menu::{MenuBuilder, MenuItemBuilder},
+    menu::{CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder},
     tray::TrayIconBuilder,
     Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
+use types::{TranslationMode, TranslationSource};
 use wordbook::Wordbook;
 
 #[tauri::command]
@@ -46,6 +49,7 @@ fn update_translation(state: State<'_, Arc<AppState>>, word: String, translation
 
 struct AppState {
     wordbook: Wordbook,
+    config: Config,
     capture_enabled: Mutex<bool>,
     auto_pronounce: Mutex<bool>,
     ocr_enabled: Mutex<bool>,
@@ -63,12 +67,14 @@ pub fn run() {
         .setup(|app| {
             println!("[CatchWord] ===== 应用启动 =====");
 
-            // Initialize wordbook
+            // Initialize wordbook and config
             let app_data_dir = app.path().app_data_dir()?;
             println!("[CatchWord] 数据目录: {:?}", app_data_dir);
-            let wordbook = Wordbook::new(app_data_dir);
+            let wordbook = Wordbook::new(app_data_dir.clone());
+            let config = Config::new(app_data_dir);
             let state = Arc::new(AppState {
                 wordbook,
+                config,
                 capture_enabled: Mutex::new(true),
                 auto_pronounce: Mutex::new(true),
                 ocr_enabled: Mutex::new(true),
@@ -93,7 +99,10 @@ pub fn run() {
                 tauri::async_runtime::spawn(async move {
                     std::thread::sleep(std::time::Duration::from_secs(2));
 
-                    let result = match translator::translate("hello").await {
+                    let cfg = test_handle.try_state::<Arc<AppState>>()
+                        .map(|s| s.config.get())
+                        .unwrap_or_default();
+                    let result = match translator::translate("hello", cfg.source, &cfg.mode.fallback_chain()).await {
                         Ok(r) => {
                             println!("[CatchWord] 自测翻译成功: {} => {}", r.word, r.translation);
                             r
@@ -132,13 +141,47 @@ pub fn run() {
 }
 
 fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(state) = app.try_state::<Arc<AppState>>() else {
+        return Err("AppState not initialized".into());
+    };
+    let current_cfg = state.config.get();
+
+    // Mode submenu
+    let mode_overseas = CheckMenuItemBuilder::with_id("mode_overseas", "海外模式")
+        .checked(current_cfg.mode == TranslationMode::Overseas)
+        .build(app)?;
+    let mode_mainland = CheckMenuItemBuilder::with_id("mode_mainland", "大陆模式")
+        .checked(current_cfg.mode == TranslationMode::Mainland)
+        .build(app)?;
+    let mode_submenu = SubmenuBuilder::with_id(app, "mode_submenu", "翻译模式")
+        .items(&[&mode_overseas, &mode_mainland])
+        .build()?;
+
+    // Source submenu
+    let source_google = CheckMenuItemBuilder::with_id("source_google", "Google Translate")
+        .checked(current_cfg.source == TranslationSource::Google)
+        .build(app)?;
+    let source_bing = CheckMenuItemBuilder::with_id("source_bing", "Bing Translator")
+        .checked(current_cfg.source == TranslationSource::Bing)
+        .build(app)?;
+    let source_mymemory = CheckMenuItemBuilder::with_id("source_mymemory", "MyMemory")
+        .checked(current_cfg.source == TranslationSource::MyMemory)
+        .build(app)?;
+    let source_submenu = SubmenuBuilder::with_id(app, "source_submenu", "翻译源")
+        .items(&[&source_google, &source_bing, &source_mymemory])
+        .build()?;
+
+    // Existing toggle items
     let toggle_capture = MenuItemBuilder::with_id("toggle_capture", "取词：已开启").build(app)?;
     let toggle_pronounce = MenuItemBuilder::with_id("toggle_pronounce", "自动发音：已开启").build(app)?;
     let toggle_ocr = MenuItemBuilder::with_id("toggle_ocr", "OCR 兜底：已开启").build(app)?;
     let toggle_wordbook = MenuItemBuilder::with_id("toggle_wordbook", "自动记单词：已开启").build(app)?;
     let open_wordbook = MenuItemBuilder::with_id("open_wordbook", "生词本").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
+
     let menu = MenuBuilder::new(app)
+        .items(&[&mode_submenu, &source_submenu])
+        .separator()
         .items(&[&toggle_capture, &toggle_pronounce, &toggle_ocr, &toggle_wordbook, &open_wordbook, &quit])
         .build()?;
 
@@ -150,7 +193,33 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .menu(&menu)
         .on_menu_event(move |app, event| {
             let Some(state) = app.try_state::<Arc<AppState>>() else { return };
-            match event.id().as_ref() {
+            let id = event.id().as_ref();
+
+            // Handle mode selection
+            if let Some(mode) = TranslationMode::from_menu_id(id) {
+                state.config.set_mode(mode);
+                let new_cfg = state.config.get();
+                // Update mode checkmarks
+                let _ = mode_overseas.set_checked(new_cfg.mode == TranslationMode::Overseas);
+                let _ = mode_mainland.set_checked(new_cfg.mode == TranslationMode::Mainland);
+                // Update source checkmarks (mode changes default source)
+                let _ = source_google.set_checked(new_cfg.source == TranslationSource::Google);
+                let _ = source_bing.set_checked(new_cfg.source == TranslationSource::Bing);
+                let _ = source_mymemory.set_checked(new_cfg.source == TranslationSource::MyMemory);
+                return;
+            }
+
+            // Handle source selection
+            if let Some(source) = TranslationSource::from_menu_id(id) {
+                state.config.set_source(source);
+                let new_cfg = state.config.get();
+                let _ = source_google.set_checked(new_cfg.source == TranslationSource::Google);
+                let _ = source_bing.set_checked(new_cfg.source == TranslationSource::Bing);
+                let _ = source_mymemory.set_checked(new_cfg.source == TranslationSource::MyMemory);
+                return;
+            }
+
+            match id {
                 "toggle_capture" => {
                     let mut v = state.capture_enabled.lock().unwrap();
                     *v = !*v;
@@ -282,7 +351,8 @@ fn start_capture_loop(app_handle: tauri::AppHandle, state: Arc<AppState>) {
                     }
 
                     tauri::async_runtime::spawn(async move {
-                        match translator::translate(&word).await {
+                        let cfg = state_ref.config.get();
+                        match translator::translate(&word, cfg.source, &cfg.mode.fallback_chain()).await {
                             Ok(result) => {
                                 println!("[CatchWord] 翻译成功: {} => {}", result.word, result.translation);
 
