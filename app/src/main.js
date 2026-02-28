@@ -18,7 +18,7 @@ let currentAudioUrl = '';
 listen('translation-result', (event) => {
     const data = event.payload;
     render(data);
-    if (data.audio_url) {
+    if (data.auto_play && data.audio_url) {
         playAudio(data.audio_url);
     }
 });

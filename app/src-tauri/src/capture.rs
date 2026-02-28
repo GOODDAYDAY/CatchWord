@@ -3,7 +3,7 @@ use std::time::Duration;
 
 /// Capture selected text: UIA first, then screenshot+OCR fallback.
 /// NO keyboard simulation. NO clipboard manipulation. Ever.
-pub fn capture_selected_text(mouse_x: f64, mouse_y: f64) -> Option<String> {
+pub fn capture_selected_text(mouse_x: f64, mouse_y: f64, ocr_enabled: bool) -> Option<String> {
     thread::sleep(Duration::from_millis(50));
 
     // --- Strategy A: UIA (fast, works for browsers/terminals/editors) ---
@@ -21,16 +21,20 @@ pub fn capture_selected_text(mouse_x: f64, mouse_y: f64) -> Option<String> {
     }
 
     // --- Strategy B: Screenshot + OCR (works for PDF/any app) ---
-    match ocr_capture(mouse_x, mouse_y) {
-        Ok(word) => {
-            if !word.is_empty() {
-                println!("[Capture] OCR 获取到单词: \"{}\"", word);
-                return Some(word);
+    if ocr_enabled {
+        match ocr_capture(mouse_x, mouse_y) {
+            Ok(word) => {
+                if !word.is_empty() {
+                    println!("[Capture] OCR 获取到单词: \"{}\"", word);
+                    return Some(word);
+                }
+            }
+            Err(e) => {
+                println!("[Capture] OCR 失败: {}", e);
             }
         }
-        Err(e) => {
-            println!("[Capture] OCR 失败: {}", e);
-        }
+    } else {
+        println!("[Capture] OCR 兜底已关闭，跳过");
     }
 
     None

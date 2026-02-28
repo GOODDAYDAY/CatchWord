@@ -17,6 +17,9 @@ use wordbook::Wordbook;
 struct AppState {
     wordbook: Wordbook,
     capture_enabled: Mutex<bool>,
+    auto_pronounce: Mutex<bool>,
+    ocr_enabled: Mutex<bool>,
+    wordbook_enabled: Mutex<bool>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -33,6 +36,9 @@ pub fn run() {
             let state = Arc::new(AppState {
                 wordbook,
                 capture_enabled: Mutex::new(true),
+                auto_pronounce: Mutex::new(true),
+                ocr_enabled: Mutex::new(true),
+                wordbook_enabled: Mutex::new(true),
             });
             app.manage(state.clone());
 
@@ -45,52 +51,45 @@ pub fn run() {
             start_capture_loop(app_handle.clone(), state);
             println!("[CatchWord] 全局鼠标钩子已启动");
 
-            // Startup self-test: translate "hello" and show popup at screen center
-            println!("[CatchWord] 启动自测: 翻译 hello...");
-            let test_handle = app_handle.clone();
-            tauri::async_runtime::spawn(async move {
-                // Wait for the webview to be ready
-                std::thread::sleep(std::time::Duration::from_secs(2));
+            // Self-test popup: only in debug builds
+            #[cfg(debug_assertions)]
+            {
+                println!("[CatchWord] 启动自测: 翻译 hello...");
+                let test_handle = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    std::thread::sleep(std::time::Duration::from_secs(2));
 
-                let result = match translator::translate("hello").await {
-                    Ok(r) => {
-                        println!("[CatchWord] 自测翻译成功: {} => {}", r.word, r.translation);
-                        r
-                    }
-                    Err(e) => {
-                        eprintln!("[CatchWord] 自测翻译失败（网络问题？）: {}", e);
-                        println!("[CatchWord] 使用 mock 数据展示浮窗...");
-                        types::TranslationResult {
-                            word: "hello".to_string(),
-                            phonetic: "həˈloʊ".to_string(),
-                            translation: "你好；喂（自测 mock 数据）".to_string(),
-                            definitions: vec![
-                                types::Definition {
-                                    part_of_speech: "interj.".to_string(),
-                                    meaning: "用于问候、接电话或引起注意".to_string(),
-                                },
-                                types::Definition {
-                                    part_of_speech: "n.".to_string(),
-                                    meaning: "招呼；问候".to_string(),
-                                },
-                            ],
-                            examples: vec!["Hello, how are you?".to_string()],
-                            audio_url: String::new(),
+                    let result = match translator::translate("hello").await {
+                        Ok(r) => {
+                            println!("[CatchWord] 自测翻译成功: {} => {}", r.word, r.translation);
+                            r
                         }
-                    }
-                };
+                        Err(e) => {
+                            eprintln!("[CatchWord] 自测翻译失败: {}", e);
+                            types::TranslationResult {
+                                word: "hello".to_string(),
+                                phonetic: "həˈloʊ".to_string(),
+                                translation: "你好；喂（自测 mock）".to_string(),
+                                definitions: vec![
+                                    types::Definition {
+                                        part_of_speech: "interj.".to_string(),
+                                        meaning: "用于问候".to_string(),
+                                    },
+                                ],
+                                examples: vec!["Hello, how are you?".to_string()],
+                                audio_url: String::new(),
+                            }
+                        }
+                    };
 
-                if let Some(popup) = test_handle.get_webview_window("popup") {
-                    show_popup(&popup, &result, 500.0, 300.0);
-                    println!("[CatchWord] 自测浮窗已弹出！5秒后自动关闭");
-                    // Auto-hide after 5 seconds so it doesn't block the user
-                    std::thread::sleep(std::time::Duration::from_secs(5));
-                    let _ = popup.hide();
-                    println!("[CatchWord] 自测浮窗已关闭，进入正常工作模式");
-                } else {
-                    eprintln!("[CatchWord] 自测失败: 找不到 popup 窗口");
-                }
-            });
+                    if let Some(popup) = test_handle.get_webview_window("popup") {
+                        show_popup(&popup, &result, 500.0, 300.0, true);
+                        println!("[CatchWord] 自测浮窗已弹出！5秒后自动关闭");
+                        std::thread::sleep(std::time::Duration::from_secs(5));
+                        let _ = popup.hide();
+                    }
+                });
+            }
 
             Ok(())
         })
@@ -99,35 +98,57 @@ pub fn run() {
 }
 
 fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let toggle = MenuItemBuilder::with_id("toggle", "取词：已开启").build(app)?;
+    let toggle_capture = MenuItemBuilder::with_id("toggle_capture", "取词：已开启").build(app)?;
+    let toggle_pronounce = MenuItemBuilder::with_id("toggle_pronounce", "自动发音：已开启").build(app)?;
+    let toggle_ocr = MenuItemBuilder::with_id("toggle_ocr", "OCR 兜底：已开启").build(app)?;
+    let toggle_wordbook = MenuItemBuilder::with_id("toggle_wordbook", "自动记单词：已开启").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
-    let menu = MenuBuilder::new(app).items(&[&toggle, &quit]).build()?;
+    let menu = MenuBuilder::new(app)
+        .items(&[&toggle_capture, &toggle_pronounce, &toggle_ocr, &toggle_wordbook, &quit])
+        .build()?;
 
-    let icon_data: Vec<u8> = vec![66, 133, 244, 255].repeat(16 * 16);
-    let icon = Image::new_owned(icon_data, 16, 16);
+    let icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))?;
 
     let _tray = TrayIconBuilder::new()
         .icon(icon)
         .tooltip("CatchWord - 全局取词翻译")
         .menu(&menu)
-        .on_menu_event(move |app, event| match event.id().as_ref() {
-            "toggle" => {
-                if let Some(state) = app.try_state::<Arc<AppState>>() {
-                    let mut enabled = state.capture_enabled.lock().unwrap();
-                    *enabled = !*enabled;
-                    let label = if *enabled {
-                        "取词：已开启"
-                    } else {
-                        "取词：已关闭"
-                    };
-                    println!("[CatchWord] 取词状态: {}", label);
-                    let _ = toggle.set_text(label);
+        .on_menu_event(move |app, event| {
+            let Some(state) = app.try_state::<Arc<AppState>>() else { return };
+            match event.id().as_ref() {
+                "toggle_capture" => {
+                    let mut v = state.capture_enabled.lock().unwrap();
+                    *v = !*v;
+                    let label = if *v { "取词：已开启" } else { "取词：已关闭" };
+                    println!("[CatchWord] {}", label);
+                    let _ = toggle_capture.set_text(label);
                 }
+                "toggle_pronounce" => {
+                    let mut v = state.auto_pronounce.lock().unwrap();
+                    *v = !*v;
+                    let label = if *v { "自动发音：已开启" } else { "自动发音：已关闭" };
+                    println!("[CatchWord] {}", label);
+                    let _ = toggle_pronounce.set_text(label);
+                }
+                "toggle_ocr" => {
+                    let mut v = state.ocr_enabled.lock().unwrap();
+                    *v = !*v;
+                    let label = if *v { "OCR 兜底：已开启" } else { "OCR 兜底：已关闭" };
+                    println!("[CatchWord] {}", label);
+                    let _ = toggle_ocr.set_text(label);
+                }
+                "toggle_wordbook" => {
+                    let mut v = state.wordbook_enabled.lock().unwrap();
+                    *v = !*v;
+                    let label = if *v { "自动记单词：已开启" } else { "自动记单词：已关闭" };
+                    println!("[CatchWord] {}", label);
+                    let _ = toggle_wordbook.set_text(label);
+                }
+                "quit" => {
+                    app.exit(0);
+                }
+                _ => {}
             }
-            "quit" => {
-                app.exit(0);
-            }
-            _ => {}
         })
         .build(app)?;
 
@@ -179,7 +200,8 @@ fn start_capture_loop(app_handle: tauri::AppHandle, state: Arc<AppState>) {
                     println!("[CatchWord] 检测到选词事件 ({}, {}), 正在捕获文本...", x, y);
 
                     // Capture selected text
-                    let text = match capture::capture_selected_text(x, y) {
+                    let ocr_on = *state.ocr_enabled.lock().unwrap();
+                    let text = match capture::capture_selected_text(x, y, ocr_on) {
                         Some(t) => {
                             println!("[CatchWord] 捕获到文本: \"{}\"", t);
                             if capture::is_english_word(&t) {
@@ -201,6 +223,8 @@ fn start_capture_loop(app_handle: tauri::AppHandle, state: Arc<AppState>) {
                     let state_ref = state.clone();
                     let word = text.clone();
                     let translating_flag = is_translating.clone();
+                    let save_word = *state.wordbook_enabled.lock().unwrap();
+                    let auto_play = *state.auto_pronounce.lock().unwrap();
 
                     {
                         let mut translating = translating_flag.lock().unwrap();
@@ -212,16 +236,18 @@ fn start_capture_loop(app_handle: tauri::AppHandle, state: Arc<AppState>) {
                             Ok(result) => {
                                 println!("[CatchWord] 翻译成功: {} => {}", result.word, result.translation);
 
-                                state_ref.wordbook.add_word(
-                                    &result.word,
-                                    &result.translation,
-                                    &result.phonetic,
-                                    &result.examples,
-                                    "",
-                                );
+                                if save_word {
+                                    state_ref.wordbook.add_word(
+                                        &result.word,
+                                        &result.translation,
+                                        &result.phonetic,
+                                        &result.examples,
+                                        "",
+                                    );
+                                }
 
                                 if let Some(popup) = handle.get_webview_window("popup") {
-                                    show_popup(&popup, &result, x, y);
+                                    show_popup(&popup, &result, x, y, auto_play);
                                     println!("[CatchWord] 浮窗已显示");
                                 } else {
                                     println!("[CatchWord] 错误: 找不到 popup 窗口");
@@ -249,7 +275,7 @@ fn start_capture_loop(app_handle: tauri::AppHandle, state: Arc<AppState>) {
     });
 }
 
-fn show_popup(popup: &WebviewWindow, result: &types::TranslationResult, mouse_x: f64, mouse_y: f64) {
+fn show_popup(popup: &WebviewWindow, result: &types::TranslationResult, mouse_x: f64, mouse_y: f64, auto_play: bool) {
     use tauri::PhysicalPosition;
 
     let offset = 15.0;
@@ -259,7 +285,18 @@ fn show_popup(popup: &WebviewWindow, result: &types::TranslationResult, mouse_x:
 
     // rdev gives physical pixels, so use PhysicalPosition
     let _ = popup.set_position(PhysicalPosition::new(x as i32, y as i32));
-    let _ = popup.emit("translation-result", result);
+
+    // Send result + auto_play flag to frontend
+    let payload = serde_json::json!({
+        "word": result.word,
+        "phonetic": result.phonetic,
+        "translation": result.translation,
+        "definitions": result.definitions,
+        "examples": result.examples,
+        "audio_url": result.audio_url,
+        "auto_play": auto_play,
+    });
+    let _ = popup.emit("translation-result", payload);
     let _ = popup.show();
     // Do NOT call set_focus() — the popup is alwaysOnTop so it's visible,
     // and stealing focus would break UIA's GetFocusedElement() on next capture.
