@@ -2,6 +2,9 @@
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
+:: Always run from repo root
+cd /d "%~dp0.."
+
 :: Get latest tag
 for /f "delims=" %%i in ('git describe --tags --abbrev^=0 2^>nul') do set "latest=%%i"
 if not defined latest set "latest=v0.0.0"
@@ -51,16 +54,9 @@ if /i not "%confirm%"=="y" (
     exit /b 0
 )
 
-:: Sync version to tauri.conf.json and package.json
+:: Sync version to tauri.conf.json and package.json via node
 echo Updating version to !new_ver! ...
-
-set "root=%~dp0.."
-powershell -Command ^
-    "$v='!new_ver!'; " ^
-    "$f='%root%\app\src-tauri\tauri.conf.json'; " ^
-    "(Get-Content $f -Raw) -replace '\"version\":\s*\"[^\"]+\"', ('\"version\": \"'+$v+'\"') | Set-Content $f -NoNewline; " ^
-    "$f='%root%\app\package.json'; " ^
-    "(Get-Content $f -Raw) -replace '\"version\":\s*\"[^\"]+\"', ('\"version\": \"'+$v+'\"') | Set-Content $f -NoNewline"
+node -e "var fs=require('fs');['app/src-tauri/tauri.conf.json','app/package.json'].forEach(function(f){var j=JSON.parse(fs.readFileSync(f,'utf8'));j.version='!new_ver!';fs.writeFileSync(f,JSON.stringify(j,null,2)+'\n')})"
 
 :: Commit version bump, tag, and push
 git add app\src-tauri\tauri.conf.json app\package.json
@@ -70,3 +66,4 @@ git push origin HEAD !new_tag!
 
 echo.
 echo Tag !new_tag! pushed. GitHub Actions will build the release.
+pause
