@@ -100,7 +100,8 @@ popup.set_focus() 抢走焦点
 1. UIA TextPattern（焦点元素）          ← 最可靠，无副作用
 2. UIA TextPattern（遍历祖先元素）      ← 浏览器必需
 3. UIA TextPattern（遍历子元素）        ← 某些特殊控件
-4. 返回 None（静默放弃）               ← UIA 全部失败时
+4. 截图 + Windows OCR                  ← PDF/任何应用的兜底
+   (GDI 截取鼠标附近 300x60 区域 → Windows.Media.Ocr → 找最近单词)
 ```
 
 ## 绝对禁止

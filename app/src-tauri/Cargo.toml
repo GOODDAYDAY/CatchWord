@@ -24,4 +24,12 @@ log = "0.4"
 windows = { version = "0.59", features = [
     "Win32_UI_Accessibility",
     "Win32_System_Com",
+    "Win32_Graphics_Gdi",
+    "Win32_Foundation",
+    "Win32_System_WinRT",
+    "Foundation",
+    "Foundation_Collections",
+    "Media_Ocr",
+    "Graphics_Imaging",
+    "Globalization",
 ] }

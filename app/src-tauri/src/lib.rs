@@ -179,7 +179,7 @@ fn start_capture_loop(app_handle: tauri::AppHandle, state: Arc<AppState>) {
                     println!("[CatchWord] 检测到选词事件 ({}, {}), 正在捕获文本...", x, y);
 
                     // Capture selected text
-                    let text = match capture::capture_selected_text() {
+                    let text = match capture::capture_selected_text(x, y) {
                         Some(t) => {
                             println!("[CatchWord] 捕获到文本: \"{}\"", t);
                             if capture::is_english_word(&t) {
