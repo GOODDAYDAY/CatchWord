@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 :: Get latest tag
@@ -28,15 +29,17 @@ echo.
 set /p "choice=Choose [1/2/3]: "
 
 if "%choice%"=="1" (
-    set "new_tag=v%major%.%minor%.%next_patch%"
+    set "new_ver=%major%.%minor%.%next_patch%"
 ) else if "%choice%"=="2" (
-    set "new_tag=v%major%.%next_minor%.0"
+    set "new_ver=%major%.%next_minor%.0"
 ) else if "%choice%"=="3" (
-    set "new_tag=v%next_major%.0.0"
+    set "new_ver=%next_major%.0.0"
 ) else (
     echo Invalid choice.
     exit /b 1
 )
+
+set "new_tag=v!new_ver!"
 
 echo.
 echo %latest% -^> !new_tag!
@@ -48,8 +51,22 @@ if /i not "%confirm%"=="y" (
     exit /b 0
 )
 
+:: Sync version to tauri.conf.json and package.json
+echo Updating version to !new_ver! ...
+
+set "root=%~dp0.."
+powershell -Command ^
+    "$v='!new_ver!'; " ^
+    "$f='%root%\app\src-tauri\tauri.conf.json'; " ^
+    "(Get-Content $f -Raw) -replace '\"version\":\s*\"[^\"]+\"', ('\"version\": \"'+$v+'\"') | Set-Content $f -NoNewline; " ^
+    "$f='%root%\app\package.json'; " ^
+    "(Get-Content $f -Raw) -replace '\"version\":\s*\"[^\"]+\"', ('\"version\": \"'+$v+'\"') | Set-Content $f -NoNewline"
+
+:: Commit version bump, tag, and push
+git add app\src-tauri\tauri.conf.json app\package.json
+git commit -m "chore: bump version to !new_ver!"
 git tag !new_tag!
-git push origin !new_tag!
+git push origin HEAD !new_tag!
 
 echo.
 echo Tag !new_tag! pushed. GitHub Actions will build the release.

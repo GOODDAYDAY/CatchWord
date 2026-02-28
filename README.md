@@ -21,7 +21,7 @@
 - **安装版** — `CatchWord_*_x64-setup.exe`（NSIS 安装包）
 - **绿色版** — `CatchWord-portable-*.zip`（解压即用，无需安装）
 
-> 打 tag 即自动构建发布，无需手动操作。
+> Windows SmartScreen 可能提示"未知发布者"，点击「更多信息 → 仍要运行」即可。这是因为程序未购买代码签名证书，不影响安全性。
 
 ## 截图
 
