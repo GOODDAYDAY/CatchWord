@@ -1,4 +1,5 @@
 import {listen} from '@tauri-apps/api/event';
+import {invoke} from '@tauri-apps/api/core';
 import {getCurrentWindow} from '@tauri-apps/api/window';
 import {LogicalSize} from '@tauri-apps/api/dpi';
 
@@ -11,8 +12,13 @@ const definitionsEl = document.getElementById('definitions');
 const examplesEl = document.getElementById('examples');
 const audioBtn = document.getElementById('audio-btn');
 const audioPlayer = document.getElementById('audio-player');
+const favBtn = document.getElementById('fav-btn');
+const masteredToggle = document.getElementById('mastered-toggle');
 
 let currentAudioUrl = '';
+let currentWord = '';
+let currentFavorited = false;
+let currentMastered = false;
 
 // Listen for translation results from Rust backend
 listen('translation-result', (event) => {
@@ -24,10 +30,17 @@ listen('translation-result', (event) => {
 });
 
 function render(data) {
+    currentWord = data.word;
     wordEl.textContent = data.word;
     phoneticEl.textContent = data.phonetic ? `/${data.phonetic}/` : '';
     translationEl.textContent = data.translation;
     currentAudioUrl = data.audio_url || '';
+
+    // Update favorited/mastered state
+    currentFavorited = !!data.favorited;
+    currentMastered = !!data.mastered;
+    favBtn.classList.toggle('active', currentFavorited);
+    masteredToggle.classList.toggle('active', currentMastered);
 
     // Render definitions
     definitionsEl.innerHTML = '';
@@ -87,6 +100,20 @@ audioBtn.addEventListener('click', () => {
     if (currentAudioUrl) {
         playAudio(currentAudioUrl);
     }
+});
+
+favBtn.addEventListener('click', async () => {
+    if (!currentWord) return;
+    currentFavorited = !currentFavorited;
+    favBtn.classList.toggle('active', currentFavorited);
+    await invoke('set_favorited', {word: currentWord, favorited: currentFavorited});
+});
+
+masteredToggle.addEventListener('click', async () => {
+    if (!currentWord) return;
+    currentMastered = !currentMastered;
+    masteredToggle.classList.toggle('active', currentMastered);
+    await invoke('set_mastered', {word: currentWord, mastered: currentMastered});
 });
 
 function escapeHtml(text) {

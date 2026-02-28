@@ -4,7 +4,8 @@
     "description": "Default capabilities for CatchWord",
     "local": true,
     "windows": [
-      "popup"
+      "popup",
+      "wordbook"
     ],
     "permissions": [
       "core:default",

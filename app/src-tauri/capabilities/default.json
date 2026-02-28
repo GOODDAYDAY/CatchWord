@@ -3,7 +3,8 @@
   "identifier": "default",
   "description": "Default capabilities for CatchWord",
   "windows": [
-    "popup"
+    "popup",
+    "wordbook"
   ],
   "permissions": [
     "core:default",

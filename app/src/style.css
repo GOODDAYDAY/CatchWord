@@ -41,6 +41,12 @@ body {
     margin-bottom: 4px;
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
 .word {
     font-size: 20px;
     font-weight: 600;
@@ -120,6 +126,77 @@ body {
 .examples .example-item::before {
     content: '• ';
     color: #4285f4;
+}
+
+.fav-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+}
+
+.fav-btn svg {
+    fill: #ccc;
+    stroke: #ccc;
+    stroke-width: 1;
+    transition: fill 0.2s, stroke 0.2s;
+}
+
+.fav-btn:hover svg {
+    fill: #ffcdd2;
+    stroke: #e57373;
+}
+
+.fav-btn.active svg {
+    fill: #e53935;
+    stroke: #e53935;
+}
+
+.popup-footer {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid #e8e8e8;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.mastered-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 12px;
+    padding: 3px 10px;
+    font-size: 12px;
+    color: #999;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.mastered-toggle svg {
+    stroke: #999;
+    transition: stroke 0.2s;
+}
+
+.mastered-toggle:hover {
+    border-color: #aaa;
+    color: #666;
+}
+
+.mastered-toggle.active {
+    background: #e8f5e9;
+    border-color: #4caf50;
+    color: #2e7d32;
+}
+
+.mastered-toggle.active svg {
+    stroke: #2e7d32;
 }
 
 .popup-container::-webkit-scrollbar {

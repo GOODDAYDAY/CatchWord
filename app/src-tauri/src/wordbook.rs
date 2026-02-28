@@ -66,9 +66,77 @@ impl Wordbook {
                 source_context: source_context.to_string(),
                 query_count: 1,
                 mastered: false,
+                favorited: false,
             });
         }
 
         self.save(&words);
+    }
+
+    pub fn get_word(&self, word: &str) -> Option<WordEntry> {
+        let words = self.words.lock().unwrap();
+        words
+            .iter()
+            .find(|w| w.word.to_lowercase() == word.to_lowercase())
+            .cloned()
+    }
+
+    pub fn list_words(&self) -> Vec<WordEntry> {
+        let words = self.words.lock().unwrap();
+        words.clone()
+    }
+
+    pub fn update_favorited(&self, word: &str, favorited: bool) -> bool {
+        let mut words = self.words.lock().unwrap();
+        if let Some(entry) = words
+            .iter_mut()
+            .find(|w| w.word.to_lowercase() == word.to_lowercase())
+        {
+            entry.favorited = favorited;
+            self.save(&words);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn update_mastered(&self, word: &str, mastered: bool) -> bool {
+        let mut words = self.words.lock().unwrap();
+        if let Some(entry) = words
+            .iter_mut()
+            .find(|w| w.word.to_lowercase() == word.to_lowercase())
+        {
+            entry.mastered = mastered;
+            self.save(&words);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn update_translation(&self, word: &str, translation: &str) -> bool {
+        let mut words = self.words.lock().unwrap();
+        if let Some(entry) = words
+            .iter_mut()
+            .find(|w| w.word.to_lowercase() == word.to_lowercase())
+        {
+            entry.translation = translation.to_string();
+            self.save(&words);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn delete_word(&self, word: &str) -> bool {
+        let mut words = self.words.lock().unwrap();
+        let len_before = words.len();
+        words.retain(|w| w.word.to_lowercase() != word.to_lowercase());
+        if words.len() < len_before {
+            self.save(&words);
+            true
+        } else {
+            false
+        }
     }
 }

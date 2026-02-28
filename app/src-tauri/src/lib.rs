@@ -10,9 +10,39 @@ use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItemBuilder},
     tray::TrayIconBuilder,
-    Emitter, Manager, WebviewWindow,
+    Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 use wordbook::Wordbook;
+
+#[tauri::command]
+fn get_word(state: State<'_, Arc<AppState>>, word: String) -> Option<types::WordEntry> {
+    state.wordbook.get_word(&word)
+}
+
+#[tauri::command]
+fn set_favorited(state: State<'_, Arc<AppState>>, word: String, favorited: bool) -> bool {
+    state.wordbook.update_favorited(&word, favorited)
+}
+
+#[tauri::command]
+fn set_mastered(state: State<'_, Arc<AppState>>, word: String, mastered: bool) -> bool {
+    state.wordbook.update_mastered(&word, mastered)
+}
+
+#[tauri::command]
+fn list_words(state: State<'_, Arc<AppState>>) -> Vec<types::WordEntry> {
+    state.wordbook.list_words()
+}
+
+#[tauri::command]
+fn delete_word(state: State<'_, Arc<AppState>>, word: String) -> bool {
+    state.wordbook.delete_word(&word)
+}
+
+#[tauri::command]
+fn update_translation(state: State<'_, Arc<AppState>>, word: String, translation: String) -> bool {
+    state.wordbook.update_translation(&word, &translation)
+}
 
 struct AppState {
     wordbook: Wordbook,
@@ -26,6 +56,10 @@ struct AppState {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .invoke_handler(tauri::generate_handler![
+            get_word, set_favorited, set_mastered,
+            list_words, delete_word, update_translation,
+        ])
         .setup(|app| {
             println!("[CatchWord] ===== 应用启动 =====");
 
@@ -83,7 +117,7 @@ pub fn run() {
                     };
 
                     if let Some(popup) = test_handle.get_webview_window("popup") {
-                        show_popup(&popup, &result, 500.0, 300.0, true);
+                        show_popup(&popup, &result, 500.0, 300.0, true, false, false);
                         println!("[CatchWord] 自测浮窗已弹出！5秒后自动关闭");
                         std::thread::sleep(std::time::Duration::from_secs(5));
                         let _ = popup.hide();
@@ -102,9 +136,10 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let toggle_pronounce = MenuItemBuilder::with_id("toggle_pronounce", "自动发音：已开启").build(app)?;
     let toggle_ocr = MenuItemBuilder::with_id("toggle_ocr", "OCR 兜底：已开启").build(app)?;
     let toggle_wordbook = MenuItemBuilder::with_id("toggle_wordbook", "自动记单词：已开启").build(app)?;
+    let open_wordbook = MenuItemBuilder::with_id("open_wordbook", "生词本").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
     let menu = MenuBuilder::new(app)
-        .items(&[&toggle_capture, &toggle_pronounce, &toggle_ocr, &toggle_wordbook, &quit])
+        .items(&[&toggle_capture, &toggle_pronounce, &toggle_ocr, &toggle_wordbook, &open_wordbook, &quit])
         .build()?;
 
     let icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))?;
@@ -143,6 +178,21 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     let label = if *v { "自动记单词：已开启" } else { "自动记单词：已关闭" };
                     println!("[CatchWord] {}", label);
                     let _ = toggle_wordbook.set_text(label);
+                }
+                "open_wordbook" => {
+                    if let Some(win) = app.get_webview_window("wordbook") {
+                        let _ = win.show();
+                        let _ = win.set_focus();
+                        return;
+                    }
+                    let _ = WebviewWindowBuilder::new(app, "wordbook", WebviewUrl::App("wordbook.html".into()))
+                        .title("CatchWord - 生词本")
+                        .inner_size(900.0, 650.0)
+                        .min_inner_size(600.0, 400.0)
+                        .resizable(true)
+                        .decorations(true)
+                        .center()
+                        .build();
                 }
                 "quit" => {
                     app.exit(0);
@@ -246,8 +296,13 @@ fn start_capture_loop(app_handle: tauri::AppHandle, state: Arc<AppState>) {
                                     );
                                 }
 
+                                // Query current wordbook state for the popup
+                                let (favorited, mastered) = state_ref.wordbook.get_word(&result.word)
+                                    .map(|e| (e.favorited, e.mastered))
+                                    .unwrap_or((false, false));
+
                                 if let Some(popup) = handle.get_webview_window("popup") {
-                                    show_popup(&popup, &result, x, y, auto_play);
+                                    show_popup(&popup, &result, x, y, auto_play, favorited, mastered);
                                     println!("[CatchWord] 浮窗已显示");
                                 } else {
                                     println!("[CatchWord] 错误: 找不到 popup 窗口");
@@ -275,7 +330,7 @@ fn start_capture_loop(app_handle: tauri::AppHandle, state: Arc<AppState>) {
     });
 }
 
-fn show_popup(popup: &WebviewWindow, result: &types::TranslationResult, mouse_x: f64, mouse_y: f64, auto_play: bool) {
+fn show_popup(popup: &WebviewWindow, result: &types::TranslationResult, mouse_x: f64, mouse_y: f64, auto_play: bool, favorited: bool, mastered: bool) {
     use tauri::PhysicalPosition;
 
     let offset = 15.0;
@@ -286,7 +341,7 @@ fn show_popup(popup: &WebviewWindow, result: &types::TranslationResult, mouse_x:
     // rdev gives physical pixels, so use PhysicalPosition
     let _ = popup.set_position(PhysicalPosition::new(x as i32, y as i32));
 
-    // Send result + auto_play flag to frontend
+    // Send result + auto_play flag + wordbook state to frontend
     let payload = serde_json::json!({
         "word": result.word,
         "phonetic": result.phonetic,
@@ -295,6 +350,8 @@ fn show_popup(popup: &WebviewWindow, result: &types::TranslationResult, mouse_x:
         "examples": result.examples,
         "audio_url": result.audio_url,
         "auto_play": auto_play,
+        "favorited": favorited,
+        "mastered": mastered,
     });
     let _ = popup.emit("translation-result", payload);
     let _ = popup.show();

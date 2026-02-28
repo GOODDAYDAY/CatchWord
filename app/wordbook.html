@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>CatchWord - 生词本</title>
+    <link href="/src/wordbook.css" rel="stylesheet">
+</head>
+<body>
+<div class="app">
+    <div class="toolbar">
+        <input class="search-input" id="search" placeholder="搜索单词..." type="text">
+        <select class="filter-select" id="filter">
+            <option value="all">全部</option>
+            <option value="favorited">已收藏</option>
+            <option value="mastered">已掌握</option>
+            <option value="unmastered">未掌握</option>
+        </select>
+        <select class="sort-select" id="sort">
+            <option value="latest">最近查询</option>
+            <option value="oldest">最早查询</option>
+            <option value="alpha">字母排序</option>
+            <option value="count">查询次数</option>
+        </select>
+    </div>
+    <div class="word-count" id="word-count"></div>
+    <div class="word-list" id="word-list"></div>
+</div>
+<script src="/src/wordbook.js" type="module"></script>
+</body>
+</html>

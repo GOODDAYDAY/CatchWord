@@ -26,5 +26,8 @@ pub struct WordEntry {
     pub last_query_time: String,
     pub source_context: String,
     pub query_count: u32,
+    #[serde(default)]
     pub mastered: bool,
+    #[serde(default)]
+    pub favorited: bool,
 }
