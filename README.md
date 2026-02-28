@@ -143,4 +143,4 @@ CatchWord/
 
 ## License
 
-MIT
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) - CatchWord © 2026 by GoodDayDay
